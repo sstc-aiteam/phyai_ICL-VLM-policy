@@ -7,11 +7,12 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("backend", choices=("arx", "yam", "realsense"), nargs="+")
+    parser.add_argument("backend", choices=("arx", "yam", "ur5", "realsense"), nargs="+")
     args = parser.parse_args()
     packages = {
         "arx": ["arx5-interface==0.1.3"],
         "yam": ["i2rt @ git+https://github.com/i2rt-robotics/i2rt.git@ac096928d6899ddf852a71c5e8fbaa6055cd9745"],
+        "ur5": ["ur-rtde>=1.5"],
         "realsense": ["pyrealsense2"],
     }
     selected = []

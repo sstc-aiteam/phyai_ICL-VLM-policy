@@ -1,0 +1,45 @@
+{
+  "extends": [
+    "simulated.json",
+    "../robots/ur5.json"
+  ],
+  "machine": "ur5-local",
+  "backend": "ur5",
+  "camera_backend": "realsense",
+  "runtime": {
+    "robot_model": "UR5-CB3",
+    "interface": "192.168.50.50",
+    "right_interface": null,
+    "trajectory_hz": 125.0
+  },
+  "cameras": {
+    "left": {
+      "serial": "REPLACE_WITH_WRIST_REALSENSE_SERIAL",
+      "role": "wrist RGB"
+    }
+  },
+  "camera_controls": {
+    "exposure_us": 12000,
+    "gain": 16
+  },
+  "scene": {
+    "safety_notes": [
+      "Set safety planes and speed limits on the pendant before running the agent."
+    ]
+  },
+  "vision": {
+    "camera_intrinsics": {
+      "left": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    }
+  },
+  "calibration": {
+    "tcp_definition": "UR tool0 flange frame, +z out of the flange toward the fingers. Translation below is an APPROXIMATE Robotiq 2F-85 fingertip offset; measure it.",
+    "link6_from_sdk_eef": [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]],
+    "link6_from_tcp": [[1,0,0,0],[0,1,0,0],[0,0,1,0.15],[0,0,0,1]],
+    "link6_from_camera": {
+      "left": [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]
+    },
+    "base_from_camera": {}
+  },
+  "calibration_note": "Identity camera intrinsics and the wrist-camera extrinsic are placeholders. Replace them with measured intrinsics and hand-eye calibration before running hardware. Set the controller's own TCP to zero so RTDE poses are flange poses."
+}

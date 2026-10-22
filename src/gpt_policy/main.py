@@ -277,6 +277,10 @@ def _run(args, interrupts) -> None:
             robot = _open_yam(runtime, settings)
             arms = ("left", "right") if runtime.right_interface else ("left",)
             interface_text = f"left={runtime.interface}, right={runtime.right_interface}"
+        elif backend == "ur5":
+            robot = _open_ur5(runtime, settings)
+            arms = ("left",)
+            interface_text = runtime.interface
         elif backend != "arx":
             raise ValueError(f"Unknown robot backend: {backend}")
         elif runtime.right_interface:
@@ -490,6 +494,14 @@ def _open_yam(runtime, settings):
         for arm in arms.values():
             arm.close()
         raise
+
+
+def _open_ur5(runtime, settings):
+    from .hardware.ur5 import UR5Robot
+
+    if runtime.right_interface:
+        raise ValueError("The ur5 backend drives one arm; set runtime.right_interface to null")
+    return UR5Robot(runtime.interface, settings, "left")
 
 
 def parse_camera_specs(values: list[str] | None) -> list[tuple[str, str]]:

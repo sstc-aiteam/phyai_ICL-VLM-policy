@@ -9,7 +9,7 @@ from gpt_policy import main
 
 
 @pytest.mark.parametrize("profile", [
-    "default.json", "examples/arx-local.json", "examples/yam-local.json",
+    "default.json", "examples/arx-local.json", "examples/yam-local.json", "examples/ur5-local.json",
     "machines/yambox.json", "machines/arx247.json", "machines/arx248.json",
 ])
 @pytest.mark.parametrize("flags,expected", [([], None), (["--no-live-window"], None)])

@@ -14,8 +14,10 @@ from .vision.perception import PixelLocalizer
 def check_configuration(settings, path, *, resolved_agent=None):
     runtime = runtime_config(settings, base_dir=path.parent)
     backend = settings.get("backend", "arx")
-    if backend not in {"arx", "yam"}:
+    if backend not in {"arx", "yam", "ur5"}:
         raise ValueError(f"Unknown backend: {backend}")
+    if backend == "ur5" and runtime.right_interface:
+        raise ValueError("The ur5 backend drives one arm; set runtime.right_interface to null")
     if runtime.right_interface == runtime.interface:
         raise ValueError("Two arms cannot share one CAN interface")
     if not np.isfinite(runtime.trajectory_hz):
