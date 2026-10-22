@@ -8,6 +8,7 @@ set are shared with the YAM backend; only the hardware layer differs
 ```bash
 python scripts/install_drivers.py ur5 realsense
 gpt-policy --config configs/machines/lab-ur5.json --check   # opens no hardware
+python -m gpt_policy.hardware.ur5_check --config configs/machines/lab-ur5.json   # read-only robot check
 ```
 
 Copy `configs/examples/ur5-local.json` to a machine profile and set the values below.
@@ -26,6 +27,33 @@ Copy `configs/examples/ur5-local.json` to a machine profile and set the values b
 At startup the adapter compares its DH model with the controller's own forward
 kinematics and refuses to run if they disagree by more than 1 mm, so a wrong robot
 model or a non-zero controller TCP offset fails early.
+
+## Bring-up check
+
+Run this before the first agent run, and again after changing calibration or cabling:
+
+```bash
+python -m gpt_policy.hardware.ur5_check --config configs/machines/lab-ur5.json --save-frame var/wrist.png
+```
+
+It sends no arm motion command. It reads the PolyScope version, robot mode and safety
+status from the Dashboard, then opens a **receive-only** RTDE connection (no control
+script is uploaded). It reports FAIL, WARN or PASS for:
+
+| Check | Catches |
+| --- | --- |
+| RTDE feed rate | A stuck or slow receive link (the same fault that froze some recorded episodes). |
+| Stops, robot and safety mode | Emergency or protective stop, brakes not released, reduced mode. |
+| Joint limits and temperatures | Starting outside `robot.joint_limits_rad`, hot motors. |
+| Kinematics vs controller | The DH model not matching the robot, or a rotated controller TCP (FAIL); a non-zero controller TCP offset is a WARN with the measured offset. |
+| IK round trip | The solver failing at the arm's current pose. |
+| Fingertip TCP pose | Prints the pose the model will see, for you to sanity-check against reality. |
+| Camera | A missing or dark frame; prints the device's own intrinsics to paste into `vision.camera_intrinsics` when the profile still has placeholders. |
+| Calibration placeholders | Identity TCP, hand-eye or intrinsics, and placeholder serials left in the profile. |
+
+`--no-network` and `--no-camera` limit it to configuration checks. `--test-gripper`
+(asks for confirmation unless `--yes`) is the one option that does more: it opens the
+control interface and cycles the Robotiq open, half, open. The arm still does not move.
 
 ## Behaviour to know
 
