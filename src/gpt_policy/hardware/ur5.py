@@ -129,9 +129,13 @@ class UR5Link:
                 self.control.reuploadScript()
             return ok
 
+    # CB3 3.13 never answers get_forward_kin when the offset is exactly zero, and joints alone return a
+    # stale tool offset; 1 micrometre along z is the same flange pose to well inside the 1 mm check.
+    _FK_PROBE_OFFSET = [0.0, 0.0, 1e-6, 0.0, 0.0, 0.0]
+
     def controller_flange_pose(self, joints):
-        """Controller FK with a zero tool offset, as xyzrpy (kinematics cross-check)."""
-        return rtde_pose_to_pose(self.control.getForwardKinematics(list(joints), [0.0] * 6))
+        """Controller FK with a (numerically) zero tool offset, as xyzrpy (kinematics cross-check)."""
+        return rtde_pose_to_pose(self.control.getForwardKinematics(list(joints), self._FK_PROBE_OFFSET))
 
     def close(self):
         if self._closed:

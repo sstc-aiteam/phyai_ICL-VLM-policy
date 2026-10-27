@@ -172,6 +172,7 @@ class FakeControl:
         return True
 
     def getForwardKinematics(self, q, tcp_offset):
+        self.last_tcp_offset = list(tcp_offset)
         pose = rtde_pose(q)
         pose[2] += self.offset
         return pose
@@ -209,6 +210,15 @@ def test_move_to_streams_servoj_and_reaches_the_target():
         assert control.servo_calls > 10
         assert result["tcp_xyzquat"][2] == pytest.approx(before[2] - 0.03, abs=2e-3)
         assert result["execution_feedback"]["settle"]["settled"]
+    finally:
+        robot.close()
+
+
+def test_startup_kinematics_check_never_sends_an_all_zero_tool_offset():
+    # CB3 3.13 never answers get_forward_kin with an exactly-zero offset, so the check would hang.
+    robot, control, _ = build()
+    try:
+        assert any(control.last_tcp_offset) and max(abs(v) for v in control.last_tcp_offset) < 1e-5
     finally:
         robot.close()
 
