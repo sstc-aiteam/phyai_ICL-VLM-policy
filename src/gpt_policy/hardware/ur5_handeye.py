@@ -387,7 +387,8 @@ def main(argv=None) -> int:
     parser.add_argument("--camera", default="left")
     parser.add_argument("--cols", type=int, required=True, help="Inner corners along the board's width")
     parser.add_argument("--rows", type=int, required=True, help="Inner corners along the board's height")
-    parser.add_argument("--square-mm", type=float, default=13.0, help="Printed square size, measured")
+    parser.add_argument("--square-mm", type=float, default=14.0,
+                        help="Printed square size; the lab board measures 14.0 mm (depth and motion agree), not its 10 mm file size")
     parser.add_argument("--output", type=Path, default=Path("var/handeye"))
     parser.add_argument("--execute", action="store_true", help="Move the arm (default: plan only)")
     parser.add_argument("--yes", action="store_true", help="Skip the MOVE confirmation")
