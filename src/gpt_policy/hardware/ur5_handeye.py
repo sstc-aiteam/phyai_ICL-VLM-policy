@@ -118,8 +118,12 @@ def _pose_matrix(vector: np.ndarray) -> np.ndarray:
     return result
 
 
-def refine_hand_eye(flanges, corner_sets, camera_matrix, distortion, points, flange_from_camera, camera_from_board):
+def refine_hand_eye(flanges, corner_sets, camera_matrix, distortion, points, flange_from_camera, camera_from_board,
+                    base_from_board=None):
     """Fit the hand-eye transform and the (fixed) board pose to every corner pixel at once.
+
+    With ``base_from_board`` given (for example registered by touching the board's corners), the board
+    is held there and only the hand-eye transform is fitted.
 
     Per-image PnP of a small board is noisy in tilt; this uses the pixels directly. Levenberg-Marquardt
     over [X, base_from_board]. Returns ``(flange_from_camera, rms_px, std)`` where ``std`` is the 1-sigma
@@ -127,12 +131,16 @@ def refine_hand_eye(flanges, corner_sets, camera_matrix, distortion, points, fla
     """
     import cv2
 
-    base_from_board = flanges[0] @ flange_from_camera @ camera_from_board
-    params = np.r_[_pose_vector(flange_from_camera), _pose_vector(base_from_board)]
+    fixed = base_from_board
+    if fixed is None:
+        base_from_board = flanges[0] @ flange_from_camera @ camera_from_board
+    params = np.r_[_pose_vector(flange_from_camera), _pose_vector(base_from_board)] if fixed is None \
+        else _pose_vector(flange_from_camera)
     observed = np.concatenate([np.asarray(c, dtype=float).reshape(-1, 2) for c in corner_sets])
 
     def residual(vector):
-        x, board = _pose_matrix(vector[:6]), _pose_matrix(vector[6:])
+        x = _pose_matrix(vector[:6])
+        board = fixed if fixed is not None else _pose_matrix(vector[6:])
         out = []
         for flange in flanges:
             pose = np.linalg.inv(flange @ x) @ board
