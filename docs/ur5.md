@@ -11,7 +11,7 @@ gpt-policy --config configs/machines/lab-ur5.json --check   # opens no hardware
 python -m gpt_policy.hardware.ur5_check --config configs/machines/lab-ur5.json   # read-only robot check
 ```
 
-Copy `configs/examples/ur5-local.json` to a machine profile and set the values below.
+Copy `configs/examples/ur5-local.json` to a machine profile and set the values below. If you move it out of `configs/examples/`, change its `extends` paths (`../examples/simulated.json`, `../robots/ur5.json`), which are relative to the file.
 
 ## Before the first run
 
@@ -22,6 +22,7 @@ Copy `configs/examples/ur5-local.json` to a machine profile and set the values b
 | Safety | pendant | Set safety planes and speed limits. IK acceptance does not prove collision-free motion. |
 | Fingertip TCP | `calibration.link6_from_tcp` | The example ships an approximate 0.15 m z offset. Measure yours. |
 | Wrist camera | `cameras.left`, `vision.camera_intrinsics.left`, `calibration.link6_from_camera.left` | The wrist camera is named `left` so it maps to the only arm. Intrinsics and hand-eye are placeholders until calibrated. |
+| Arm kinematics | `robot.kinematics_calibration` | This arm's factory DH calibration. Every UR arm differs from the nominal model by millimetres, enough to fail the startup check. Run `python -m gpt_policy.hardware.ur5_kinematics <robot ip>` (read-only) and paste the block into the profile. |
 | Robotiq script | `robot.robotiq_preamble` | Path to a Python file defining `ROBOTIQ_PREAMBLE` (the ur_rtde Robotiq preamble). If unset, `ur7e_recorder` is imported when installed. |
 
 At startup the adapter compares its DH model with the controller's own forward
