@@ -6,7 +6,7 @@ from gpt_policy.geometry.poses import matrix_to_pose, pose_to_matrix
 from gpt_policy.hardware.motion_control import MotionFault
 from gpt_policy.hardware.robotiq_ur import NoGripper, RobotiqUR, opening_to_raw
 from gpt_policy.hardware.ur5 import UR5Link, UR5Robot
-from gpt_policy.hardware.ur5_ik import UR5IK, analytic_solutions, forward_matrix
+from gpt_policy.hardware.ur5_ik import NOMINAL_CHAIN, UR5IK, Chain, analytic_solutions, chain_from_settings, forward_matrix
 from gpt_policy.motion.coordination import TrajectoryIKError
 
 HOME = np.array([0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0.0])
@@ -55,6 +55,54 @@ def test_solve_honours_joint_limits_and_reports_unreachable_targets():
     far = np.r_[2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0][:6]
     with pytest.raises(TrajectoryIKError):
         UR5IK().solve(far, HOME, 1, 1)
+
+
+# A real CB3 arm's factory calibration; joints 2/3 use UR's redundant large-d2/d3 parameterization.
+CALIBRATION = {
+    "dh_theta": [1.4046709602427362e-05, -1.0667405705515913, 1.0597476489326159, 0.006871914746597391,
+                 1.217511230737771e-05, 4.844992693619869e-05],
+    "dh_a": [7.105856908529943e-05, -0.20551391937761987, -0.39221713329545993, 7.873746432614875e-05,
+             3.9321789037181836e-05, 0.0],
+    "dh_d": [0.08922112926639071, 227.85419881246582, -228.1449493293873, 0.40092686041540593,
+             0.09480852379818619, 0.08258423411251604],
+    "dh_alpha": [1.5704928138799201, -0.0016351448055779852, 0.009384731158707702, 1.5701325921139673,
+                 -1.5703626259402443, 0.0],
+}
+
+
+def test_calibrated_chain_stays_within_millimetres_of_nominal_and_nominal_chain_is_identity():
+    calibrated = Chain.from_calibration(CALIBRATION)
+    assert np.abs(forward_matrix(HOME, NOMINAL_CHAIN) - forward_matrix(HOME)).max() == 0.0
+    assert 1e-4 < np.linalg.norm(forward_matrix(HOME, calibrated)[:3, 3] - forward_matrix(HOME)[:3, 3]) < 5e-3
+
+
+def test_chain_is_read_from_the_robot_settings_and_validated():
+    assert chain_from_settings({"robot": {}}) is NOMINAL_CHAIN
+    assert chain_from_settings({"robot": {"kinematics_calibration": CALIBRATION}}).d[1] == CALIBRATION["dh_d"][1]
+    with pytest.raises(ValueError):
+        chain_from_settings({"robot": {"kinematics_calibration": {"dh_theta": [0.0] * 6}}})
+    with pytest.raises(ValueError):
+        Chain([0.0] * 5, [0.0] * 6, [0.0] * 6, [0.0] * 6)
+
+
+def test_calibrated_solve_hits_targets_the_nominal_model_would_miss_by_millimetres():
+    chain = Chain.from_calibration(CALIBRATION)
+    calibrated, nominal = UR5IK(chain=chain), UR5IK()
+    joints = HOME.copy()
+    for step in range(40):
+        previous = joints
+        joints = previous + np.array([0.01, 0.005, -0.004, 0.006, 0.0, -0.01])
+        target = calibrated.forward_kinematics(joints)
+        solved = calibrated.solve(target, previous, 1, step)
+        assert np.abs(solved - joints).max() < 1e-3  # same branch, no flip
+        assert calibrated.error(target, solved)[0] < 1e-4
+    assert nominal.error(target, solved)[0] > 5e-4  # the nominal model really is off for this arm
+
+
+def test_calibrated_solve_returns_the_seed_for_its_own_pose_even_near_a_wrist_singularity():
+    ik = UR5IK(chain=Chain.from_calibration(CALIBRATION))
+    seed = np.array([0.0622, -1.6475, 0.1542, -1.5312, -0.0182, -1.6651])
+    assert np.abs(ik.solve(ik.forward_kinematics(seed), seed, 0, 0) - seed).max() < 1e-9
 
 
 def test_opening_maps_to_robotiq_register():

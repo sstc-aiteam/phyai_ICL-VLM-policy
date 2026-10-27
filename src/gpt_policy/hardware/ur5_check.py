@@ -25,7 +25,7 @@ from ..geometry.poses import pose_to_matrix, rotation_distance
 from ..settings import load_settings
 from .robotiq_ur import RobotiqUR, load_preamble
 from .ur5 import UR5_JOINT_LIMITS, UR5Link
-from .ur5_ik import UR5IK, rtde_pose_to_pose
+from .ur5_ik import UR5IK, chain_from_settings, rtde_pose_to_pose
 
 DASHBOARD_PORT = 29999
 ROBOT_MODE_RUNNING = 7
@@ -157,14 +157,15 @@ def check_rtde(settings, receive, seconds=1.0, clock=time.monotonic, sleep=time.
     results.append(Result("WARN" if max(temperatures) >= limit else "PASS", "joint temperatures",
                           f"max {max(temperatures):.0f} C (limit {limit:.0f} C)"))
 
-    ik = UR5IK(settings.get("motion", {}), limits)
+    ik = UR5IK(settings.get("motion", {}), limits, chain_from_settings(settings))
     flange = ik.forward_kinematics(q)
     controller = rtde_pose_to_pose(receive.getActualTCPPose())
     rotation_error = rotation_distance(flange[3:], controller[3:])
     offset = (np.linalg.inv(pose_to_matrix(flange)) @ pose_to_matrix(controller))[:3, 3]
     if rotation_error > ROTATION_TOLERANCE_RAD:
         results.append(Result("FAIL", "kinematics vs controller",
-                              f"orientation differs by {rotation_error:.3f} rad: the DH model does not match this robot, "
+                              f"orientation differs by {rotation_error:.3f} rad: the kinematic model does not match this robot "
+                              "(save its factory calibration with `python -m gpt_policy.hardware.ur5_kinematics`), "
                               "or the controller TCP has a rotation (set it to zero on the pendant and rerun)"))
     elif np.linalg.norm(offset) > POSITION_TOLERANCE_M:
         results.append(Result("WARN", "kinematics vs controller",

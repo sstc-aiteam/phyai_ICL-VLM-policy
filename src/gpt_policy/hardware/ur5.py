@@ -16,7 +16,7 @@ import numpy as np
 from ..geometry.poses import rotation_distance
 from .motion_control import MotionFault
 from .robotiq_ur import NoGripper, RobotiqUR, load_preamble
-from .ur5_ik import UR5IK, rtde_pose_to_pose
+from .ur5_ik import UR5IK, chain_from_settings, rtde_pose_to_pose
 from .yam import YamRobot
 
 UR5_JOINT_LIMITS = [[-2 * np.pi, 2 * np.pi]] * 6
@@ -161,7 +161,7 @@ class UR5Robot(YamRobot):
             if self._gripper_impl is None:
                 self._gripper_impl = self._open_gripper(link, robot)
             super().__init__(ip, settings, side, driver=link,
-                             ik=ik or UR5IK(motion, limits))
+                             ik=ik or UR5IK(motion, limits, chain_from_settings(settings)))
             self._verify_kinematics()
         except BaseException:
             link.close()

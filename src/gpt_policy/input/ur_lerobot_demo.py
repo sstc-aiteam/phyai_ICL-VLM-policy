@@ -25,7 +25,7 @@ import numpy as np
 
 from ..geometry.frames import FrameCalibration
 from ..geometry.poses import matrix_to_pose, rpy_to_quaternion
-from ..hardware.ur5_ik import forward_matrix
+from ..hardware.ur5_ik import NOMINAL_CHAIN, chain_from_settings, forward_matrix
 from ..settings import load_settings
 from .action_sampling import gripper_events
 
@@ -126,11 +126,11 @@ def load_episode(root, episode: int, video_keys=None) -> Episode:
                    fps, str(info.get("robot_type", "ur")), state, action, dataset_index, videos, sources)
 
 
-def tcp_poses(joints: np.ndarray, frames: FrameCalibration) -> np.ndarray:
+def tcp_poses(joints: np.ndarray, frames: FrameCalibration, chain=NOMINAL_CHAIN) -> np.ndarray:
     """Per-frame ``[x, y, z, qx, qy, qz, qw]`` of the calibrated fingertip TCP in the UR base frame."""
     result, previous = [], None
     for q in joints:
-        tcp = frames.sdk_to_tcp(matrix_to_pose(forward_matrix(q)))
+        tcp = frames.sdk_to_tcp(matrix_to_pose(forward_matrix(q, chain)))
         quaternion = np.asarray(rpy_to_quaternion(tcp[3:]))
         # q and -q are one rotation; keep the sequence continuous.
         if (previous is None and quaternion[3] < 0) or (previous is not None and np.dot(previous, quaternion) < 0):
@@ -240,7 +240,7 @@ def _arm_sample(ep: Episode, poses, opening, i, include_targets):
 
 def build_bundle(ep: Episode, frames: FrameCalibration, destination: Path, *, config_label: str,
                  camera_names: dict, keyframes=12, task=None, outcome="unverified",
-                 robot_model=None, allow_frozen=False, ffmpeg="ffmpeg") -> dict:
+                 robot_model=None, allow_frozen=False, ffmpeg="ffmpeg", chain=NOMINAL_CHAIN) -> dict:
     """Write ``demo.json`` and images into ``destination`` (must not exist). Returns a report."""
     destination = Path(destination).resolve()
     if destination.exists():
@@ -258,7 +258,7 @@ def build_bundle(ep: Episode, frames: FrameCalibration, destination: Path, *, co
 
     opening = 1.0 - ep.state[:, 6]  # Recorder: 1 = closed. Here: 0 closed, 1 open.
     include_targets = bool(np.max(np.abs(ep.action[:, :6] - ep.state[:, :6])) > 1e-6)
-    poses = tcp_poses(ep.state[:, :6], frames)
+    poses = tcp_poses(ep.state[:, :6], frames, chain)
     times = ep.times
     chosen, labels = select_keyframes(ep.state[:, :6], opening, keyframes)
     anchors = set(geometry_anchors(poses, opening, times))
@@ -360,6 +360,7 @@ def main(argv=None) -> int:
 
     settings = load_settings(args.config)
     frames = FrameCalibration(settings)
+    chain = chain_from_settings(settings)
     episodes = parse_episodes(args.episodes)
     if args.output.exists():
         parser.error(f"{args.output} already exists")
@@ -379,7 +380,8 @@ def main(argv=None) -> int:
             report = build_bundle(
                 episode, frames, destination, config_label=str(args.config), camera_names=names,
                 keyframes=args.keyframes, task=args.task, outcome=args.outcome,
-                robot_model=args.robot_model, allow_frozen=args.allow_frozen, ffmpeg=args.ffmpeg)
+                robot_model=args.robot_model, allow_frozen=args.allow_frozen, ffmpeg=args.ffmpeg,
+                chain=chain)
         except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as exc:
             print(f"episode {index}: skipped: {exc}")
             exit_code = 1

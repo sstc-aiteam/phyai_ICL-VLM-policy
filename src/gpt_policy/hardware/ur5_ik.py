@@ -21,6 +21,33 @@ _A = (0.0, A2, A3, 0.0, 0.0, 0.0)
 _D = (D1, 0.0, 0.0, D4, D5, D6)
 
 
+class Chain:
+    """Per-joint classic DH rows ``theta`` (offset added to the joint), ``a``, ``d``, ``alpha``."""
+
+    def __init__(self, theta, a, d, alpha):
+        self.theta, self.a, self.d, self.alpha = (
+            tuple(float(v) for v in row) for row in (theta, a, d, alpha))
+        if any(len(row) != 6 or not np.isfinite(row).all() for row in (self.theta, self.a, self.d, self.alpha)):
+            raise ValueError("A UR5 kinematic chain needs six finite values per DH row")
+
+    @classmethod
+    def from_calibration(cls, calibration) -> "Chain":
+        """Build from the controller's factory kinematics (``robot.kinematics_calibration``)."""
+        try:
+            return cls(*(calibration[key] for key in ("dh_theta", "dh_a", "dh_d", "dh_alpha")))
+        except KeyError as exc:
+            raise ValueError(f"kinematics_calibration is missing {exc}") from exc
+
+
+NOMINAL_CHAIN = Chain((0.0,) * 6, _A, _D, _ALPHA)
+
+
+def chain_from_settings(settings) -> Chain:
+    """This arm's calibrated chain from ``robot.kinematics_calibration``, else the nominal UR5."""
+    calibration = (settings.get("robot") or {}).get("kinematics_calibration")
+    return Chain.from_calibration(calibration) if calibration else NOMINAL_CHAIN
+
+
 def _dh(theta: float, d: float, a: float, alpha: float) -> np.ndarray:
     ct, st, ca, sa = np.cos(theta), np.sin(theta), np.cos(alpha), np.sin(alpha)
     return np.array([
@@ -31,14 +58,14 @@ def _dh(theta: float, d: float, a: float, alpha: float) -> np.ndarray:
     ])
 
 
-def _link(index: int, theta: float) -> np.ndarray:
-    return _dh(theta, _D[index], _A[index], _ALPHA[index])
+def _link(index: int, theta: float, chain: Chain = NOMINAL_CHAIN) -> np.ndarray:
+    return _dh(theta + chain.theta[index], chain.d[index], chain.a[index], chain.alpha[index])
 
 
-def forward_matrix(joints) -> np.ndarray:
+def forward_matrix(joints, chain: Chain = NOMINAL_CHAIN) -> np.ndarray:
     transform = np.eye(4)
     for index, theta in enumerate(joints):
-        transform = transform @ _link(index, float(theta))
+        transform = transform @ _link(index, float(theta), chain)
     return transform
 
 
@@ -128,8 +155,14 @@ class UR5IK:
 
     name = "UR5 CB3 closed-form IK (8 branches, nearest to seed), verified by FK"
 
-    def __init__(self, motion=None, joint_limits=None):
+    def __init__(self, motion=None, joint_limits=None, chain: Chain | None = None):
+        """``chain`` is this arm's calibrated kinematics; without it the nominal UR5 model is used.
+
+        The closed form is nominal, so with a calibrated chain every branch is polished by
+        Newton steps on the calibrated FK (a few millimetres at most) before it is verified.
+        """
         motion = motion or {}
+        self.chain = chain or NOMINAL_CHAIN
         limits = np.asarray(joint_limits if joint_limits is not None
                             else [[-2 * np.pi, 2 * np.pi]] * 6, dtype=float)
         self._set_limits(limits)
@@ -151,7 +184,7 @@ class UR5IK:
         joints = np.asarray(joints, dtype=float)
         if joints.shape != (6,) or not np.isfinite(joints).all():
             raise ValueError("UR5 arm joints must be a finite six-vector")
-        return matrix_to_pose(forward_matrix(joints))
+        return matrix_to_pose(forward_matrix(joints, self.chain))
 
     def error(self, target, joints) -> tuple[float, float]:
         actual = self.forward_kinematics(joints)
@@ -166,7 +199,12 @@ class UR5IK:
         seed = np.asarray(seed, dtype=float)
         with self.lock:
             best, best_cost, nearest = None, np.inf, (1e30, 1e30)
-            for candidate in analytic_solutions(pose_to_matrix(target)):
+            candidates = analytic_solutions(pose_to_matrix(target))
+            if self.chain is not NOMINAL_CHAIN:
+                # The closed form is nominal; the seed itself is the exact answer when the target
+                # is the seed's own pose, and keeps near-singular wrists from drifting.
+                candidates = [self._newton(target, candidate) for candidate in [*candidates, seed]]
+            for candidate in candidates:
                 joints = _wrap_near(candidate, seed, self.lower, self.upper)
                 if joints is None:
                     continue
@@ -191,10 +229,17 @@ class UR5IK:
 
     def _refine(self, target: np.ndarray, seed: np.ndarray):
         """Damped least squares from the seed; covers wrist singularities."""
-        joints = seed.copy()
+        joints = self._newton(target, seed)
+        if np.any(joints < self.lower - 1e-7) or np.any(joints > self.upper + 1e-7):
+            return None
+        translation, rotation = self.error(target, joints)
+        return joints if self._within(translation, rotation) else None
+
+    def _newton(self, target: np.ndarray, start: np.ndarray) -> np.ndarray:
+        joints = np.asarray(start, dtype=float).copy()
+        wanted = pose_to_matrix(target)
         for _ in range(max(1, 5 * self.refine_iterations)):
-            current = forward_matrix(joints)
-            wanted = pose_to_matrix(target)
+            current = forward_matrix(joints, self.chain)
             twist = np.r_[wanted[:3, 3] - current[:3, 3], _rotation_error(current[:3, :3], wanted[:3, :3])]
             if np.linalg.norm(twist[:3]) < 1e-5 and np.linalg.norm(twist[3:]) < 1e-4:
                 break
@@ -202,15 +247,12 @@ class UR5IK:
             for i in range(6):
                 step = np.zeros(6)
                 step[i] = 1e-6
-                after = forward_matrix(joints + step)
+                after = forward_matrix(joints + step, self.chain)
                 jacobian[:3, i] = (after[:3, 3] - current[:3, 3]) / 1e-6
                 jacobian[3:, i] = _rotation_error(current[:3, :3], after[:3, :3]) / 1e-6
             damping = 1e-3
             joints = joints + jacobian.T @ np.linalg.solve(jacobian @ jacobian.T + damping * np.eye(6), twist)
-        if np.any(joints < self.lower - 1e-7) or np.any(joints > self.upper + 1e-7):
-            return None
-        translation, rotation = self.error(target, joints)
-        return joints if self._within(translation, rotation) else None
+        return joints
 
 
 def _rotation_error(current: np.ndarray, wanted: np.ndarray) -> np.ndarray:
