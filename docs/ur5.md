@@ -20,7 +20,7 @@ Copy `configs/examples/ur5-local.json` to a machine profile and set the values b
 | Robot IP | `runtime.interface` | `right_interface` must stay `null` (one arm). |
 | Pendant | PolyScope 3.x | Remote control on, External Control program playing, **controller TCP set to zero** (poses are flange poses; the fingertip offset comes from `link6_from_tcp`). |
 | Safety | pendant | Set safety planes and speed limits. IK acceptance does not prove collision-free motion. |
-| Fingertip TCP | `calibration.link6_from_tcp` | The example ships an approximate 0.15 m z offset. Measure yours. |
+| Fingertip TCP | `calibration.link6_from_tcp` | The example ships an approximate 0.15 m z offset. Measure yours: `python -m gpt_policy.hardware.ur5_tcp_pivot --config <profile>` (hand-guide the closed fingertips onto one fixed point from six orientations; read-only). A ruler was 12 mm short on the lab arm. |
 | Wrist camera | `cameras.left`, `vision.camera_intrinsics.left`, `calibration.link6_from_camera.left` | The wrist camera is named `left` so it maps to the only arm. Intrinsics and hand-eye are placeholders until calibrated. |
 | Arm kinematics | `robot.kinematics_calibration` | This arm's factory DH calibration. Every UR arm differs from the nominal model by millimetres, enough to fail the startup check. Run `python -m gpt_policy.hardware.ur5_kinematics <robot ip>` (read-only) and paste the block into the profile. |
 | Robotiq script | `robot.robotiq_preamble` | Path to a Python file defining `ROBOTIQ_PREAMBLE` (the ur_rtde Robotiq preamble). If unset, `ur7e_recorder` is imported when installed. |

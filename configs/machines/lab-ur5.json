@@ -41,13 +41,13 @@
     "calibration_source": "Factory intrinsics read from the D405 (serial 260422275184) at 640x480 RGB; not a measured calibration."
   },
   "calibration": {
-    "tcp_definition": "UR tool0 flange frame, +z out of the flange toward the fingers. Translation below is the Robotiq 2F-85 fingertip offset, measured with a ruler (150 mm, about +/-2 mm).",
+    "tcp_definition": "UR tool0 flange frame, +z out of the flange toward the fingers. Translation below is the Robotiq 2F-85 closed-fingertip offset from a six-touch pivot on one printed corner (z 162 mm, 1-sigma about 2 mm; x and y were within the 2 mm noise and are 0). A ruler gave 150 mm.",
     "link6_from_sdk_eef": [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]],
-    "link6_from_tcp": [[1,0,0,0],[0,1,0,0],[0,0,1,0.15],[0,0,0,1]],
+    "link6_from_tcp": [[1,0,0,0],[0,1,0,0],[0,0,1,0.162],[0,0,0,1]],
     "link6_from_camera": {
       "left": [[-0.036127, -0.836009, -0.547526, 0.07269], [0.999251, -0.037838, -0.008158, -0.011266], [-0.013898, -0.54741, 0.836749, 0.056693], [0, 0, 0, 1]]
     },
     "base_from_camera": {}
   },
-  "calibration_note": "Camera intrinsics are the D405 factory values. link6_from_tcp (0.15 m) is a ruler measurement; link6_from_camera.left is a hand-eye fit to a chessboard of 8x5 inner corners (two runs, var/handeye/20261027-200250 and 20261027-212335, 18 poses, 0.74 px corner RMS). The printed squares measure 14.0 mm, not the 13 mm first assumed: the D405 depth (14.08 mm) and the robot's own motion (14.04 mm) agree; confirm with a ruler. Expect about a millimetre of error at the board and verify it before precise work. Set the controller's own TCP to zero so RTDE poses are flange poses."
+  "calibration_note": "Camera intrinsics are the D405 factory values. link6_from_tcp (0.162 m) is a pivot measurement; link6_from_camera.left is a hand-eye fit to a chessboard of 8x5 inner corners (two runs, var/handeye/20261027-200250 and 20261027-212335, 18 poses, 0.74 px corner RMS). The printed squares measure 14.0 mm, not the 13 mm first assumed: the D405 depth (14.08 mm) and the robot's own motion (14.04 mm) agree; confirm with a ruler. Expect about a millimetre of error at the board and verify it before precise work. Set the controller's own TCP to zero so RTDE poses are flange poses."
 }
