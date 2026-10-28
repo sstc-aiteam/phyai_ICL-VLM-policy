@@ -17,7 +17,7 @@ from .hardware.camera_warmup import warm_up_cameras
 from .hardware.bimanual import BimanualRobot
 from .hardware.robot import ArxRobot
 from .hardware.motion_control import MotionFault
-from .harness.config import AGENT_NAMES, agent_config, named_agent_config, save_claude_key, with_live_image_window
+from .harness.config import agent_config, agent_provider, named_agent_config, save_claude_key, with_live_image_window
 from .harness.factory import create_agent, preflight_agent
 from .harness.models import AgentContext
 from .harness.input_content import FIRST_TURN_RESERVE_CHARS, validate_input_size
@@ -47,6 +47,14 @@ from .vision.perception import PixelLocalizer
 
 
 REQUEST_DIRECTORY = Path(__file__).resolve().parents[2] / "request_json"
+
+
+def _agent_name(value: str) -> str:
+    try:
+        agent_provider(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return value
 
 
 def parse_args(default_agent: str | None = None) -> argparse.Namespace:
@@ -84,7 +92,7 @@ def parse_args(default_agent: str | None = None) -> argparse.Namespace:
         help="隐藏输入并保存 Claude 网关 API Key，然后退出",
     )
     parser.add_argument("--machine", help="Machine profile name under configs/machines/")
-    parser.add_argument("--agent", choices=AGENT_NAMES, default=default_agent, help="覆盖本次运行的 agent 配置")
+    parser.add_argument("--agent", type=_agent_name, default=default_agent, metavar="PROFILE", help="覆盖本次运行的 agent 配置")
     parser.add_argument("--check", action="store_true", help="只检查配置，不打开相机、CAN 或模型会话")
     live_window = parser.add_mutually_exclusive_group()
     live_window.add_argument("--live-window", dest="live_image_window", type=int, metavar="N",
@@ -142,7 +150,7 @@ def _run(args, interrupts) -> None:
         from .preflight import check_configuration
         print(json.dumps(check_configuration(settings, config_path, resolved_agent=agent_settings), ensure_ascii=False, indent=2))
         return
-    runs_root = Path("var/runs") / {"codex": "gpt", "claude": "claude", "kimi": "kimi"}[settings.get("agent", "codex")]
+    runs_root = Path("var/runs") / {"codex": "gpt", "claude": "claude", "kimi": "kimi"}[agent_provider(settings.get("agent", "codex"))]
     set_usage_run_root(runs_root / "_initialization_failed")
     display = RunConsole()
     if agent_settings.type == "codex":

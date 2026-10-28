@@ -11,6 +11,9 @@ from pathlib import Path
 from typing import Any, Mapping
 
 AGENT_NAMES = ("codex", "claude", "kimi")
+# A profile name is a provider, optionally with a variant: ``codex-terra`` is a Codex profile.
+# A bare provider with no file of its own resolves to its default variant.
+DEFAULT_PROFILES = {"codex": "codex-astra"}
 _PROVIDER_TYPES = {"codex": "codex", "claude": "claude_code", "kimi": "claude_code"}
 
 # Import connection settings only; CLI tools, hooks, model aliases and arbitrary
@@ -53,6 +56,15 @@ def with_live_image_window(config: AgentConfig, window: int | None) -> AgentConf
     return replace(config, live_image_window=window)
 
 
+def agent_provider(selected: str) -> str:
+    """The provider (``codex``, ``claude`` or ``kimi``) behind a profile name such as ``codex-terra``."""
+
+    provider = selected.split("-", 1)[0]
+    if provider not in AGENT_NAMES:
+        raise ValueError(f"不支持的 agent: {selected}; 可选: {', '.join(AGENT_NAMES)} (可加后缀, 如 codex-terra)")
+    return provider
+
+
 def agent_config(
     settings: dict[str, Any],
     base_dir: Path,
@@ -71,10 +83,10 @@ def named_agent_config(
 ) -> AgentConfig:
     """Load one named agent independently of the main selector."""
 
-    if selected not in AGENT_NAMES:
-        raise ValueError(f"不支持的 agent: {selected}; 可选: {', '.join(AGENT_NAMES)}")
-
+    provider = agent_provider(selected)
     filename = base_dir / "agents" / f"{selected}.json"
+    if not filename.exists() and selected in DEFAULT_PROFILES:
+        filename = base_dir / "agents" / f"{DEFAULT_PROFILES[selected]}.json"
     try:
         with filename.open(encoding="utf-8") as stream:
             value = json.load(stream)
@@ -89,8 +101,8 @@ def named_agent_config(
     if unknown:
         raise ValueError(f"{filename} 中存在未知字段: {sorted(unknown)}")
 
-    kind = _PROVIDER_TYPES[selected]
-    codex = selected == "codex"
+    kind = _PROVIDER_TYPES[provider]
+    codex = provider == "codex"
     window = value.get("live_image_window")
     if "live_image_window" in value and not codex:
         raise ValueError("live_image_window is only supported by Codex")
@@ -126,7 +138,7 @@ def named_agent_config(
     environment: Mapping[str, str] = {}
     if codex:
         if set(value) & {"base_url", "settings_file"}:
-            raise ValueError("codex.json 不支持 base_url 或 settings_file")
+            raise ValueError("codex 配置不支持 base_url 或 settings_file")
     elif "settings_file" in value:
         if "base_url" in value:
             raise ValueError(f"{selected}.settings_file 与 base_url 不能同时设置")
@@ -134,7 +146,7 @@ def named_agent_config(
         if not source.is_absolute():
             source = filename.parent / source
         environment = _claude_environment(source)
-    elif selected == "kimi":
+    elif provider == "kimi":
         raise ValueError("kimi.settings_file 必须指向 Kimi 的 Claude Code 配置")
     else:
         base_url = _text(value.get("base_url"), "claude.base_url").rstrip("/")

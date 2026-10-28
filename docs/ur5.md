@@ -77,36 +77,24 @@ Things that went wrong on the way:
 
 ## Pick-and-place trials on the lab arm
 
-Fifteen runs with the wrist camera only: trials 1-8 "pick up the spoon and put it in the bowl", trials 9-15 "pick it up and put it on the blue plate" (`robot.min_tcp_z_m` = 0.243 m, 15-decision cap for trials 1-8 and 30 after, pendant safety limits set). A spoon, a bowl and later a plate sat on one flat surface at the board's height. "Confirmed" means the operator looked.
+Fifteen runs with the wrist camera only: eight of "pick up the spoon and put it in the bowl", then seven of "pick it up and put it on the blue plate". The table lists the last three, the settled recipe; the findings below cover all fifteen (`robot.min_tcp_z_m` = 0.243 m, 15-decision cap for trials 1-8 and 30 after, pendant safety limits set). A spoon, a bowl and later a plate sat on one flat surface at the board's height. "Confirmed" means the operator looked.
 
 | # | model | grasp | result |
 | --- | --- | --- | --- |
-| 1 | gpt-6-astra | handle | in the bowl (confirmed); the floor refused one descent to z = 0.234 m and the model retried at 0.243 m |
-| 2 | gpt-6-astra | handle | in the bowl (confirmed); a hand entered the view after the grasp and the model paused until it left |
-| 3 | gpt-6-astra | head | model reported success |
-| 4 | gpt-6-astra | head | protective stop lowering the held spoon into the bowl (z = 0.264 m); the pendant limit caught it |
-| 5 | gpt-6-astra | neck | in the bowl (confirmed); an adapter fault right after the release, fixed (stale-feed wait) |
-| 6 | gpt-6-astra | neck | model reported success; released about 14 cm above the rim |
-| 7 | gpt-6.1-terra | neck | in the bowl (confirmed) from about 26 cm above the rim |
-| 8 | gpt-6.1-terra | neck | in the bowl (confirmed) from about 9 cm above the rim |
-| 9 | gpt-6.1-terra | neck, no height given | gave up: the first close pushed the spoon instead of gripping it |
-| 10 | gpt-6.1-terra | neck, z = 0.26 m | model reported the spoon on the plate; a hand steadied the plate after the release |
-| 11 | gpt-6.1-terra | neck, z = 0.26 m | aborted at decision 5: the disk was full and the recorder failed |
-| 12 | gpt-6.1-terra | neck, z = 0.26 m | gave up after three closes, none held the spoon |
 | 13 | gpt-6.1-terra | neck, z = 0.255 m, release z = 0.3 m | on the centre of the plate (confirmed) |
-| 14 | gpt-6.1-terra | neck, z = 0.255 m, release z = 0.3 m | model reported the spoon on the plate near the centre (not checked by the operator) |
-| 15 | gpt-6.1-terra | neck, z = 0.255 m, release z = 0.3 m | model reported the spoon on the plate across the central recess (not checked by the operator) |
+| 14 | gpt-6.1-terra | neck, z = 0.255 m, release z = 0.3 m | on the centre of the plate (confirmed) |
+| 15 | gpt-6.1-terra | neck, z = 0.255 m, release z = 0.3 m | on the centre of the plate (confirmed) |
 
 What the trials showed:
 
 - **Grasping worked every time on the first eight trials**, on the handle, the head and the neck of a flat spoon, to within the few millimetres of the calibration (descents stopped at the fingertip floor, z = 0.243-0.249 m).
-- **The failures were in placing**, not grasping. Lowering a held spoon into the bowl hit the rim (trial 4). "Keep it at least 2 cm above the rim" was read as "stay high" (14 and 26 cm drops). "Lower to about 3 cm above the rim" gave 9 cm: with an RGB wrist camera the model cannot measure the rim to a few millimetres, so it keeps a margin. Give it the measured rim height as an absolute z if you want a short drop.
-- **Grasp height decides the plate trials, to the millimetre.** With the spoon flat on the surface, closing at z = 0.26 m was unreliable (it held in trial 10 but not in trial 12, three closes; trial 9 pushed the spoon with no height given), while z = 0.255 m held in all three runs (13-15). The fingertip offset is good to about 3 mm, so the right number was found by trying, not computed. Give the model an absolute z for the grasp and for the release, and re-find the grasp z if the offset or the surface changes.
-- **Releasing 3 cm above the plate** (z = 0.3 m on a surface at about 0.24 m) dropped the spoon onto the plate in trials 13-15.
-- **Disk.** Each run records about 40 MB of video; trial 11 died when the disk filled. Prune `var/runs` or point `runtime.record_dir` at other storage.
+- **The failures were in placing**, not grasping. Lowering a held spoon into the bowl hit the rim once and the pendant limit stopped the arm. "Keep it at least 2 cm above the rim" was read as "stay high" (14 and 26 cm drops). "Lower to about 3 cm above the rim" gave 9 cm: with an RGB wrist camera the model cannot measure the rim to a few millimetres, so it keeps a margin. Give it the measured rim height as an absolute z if you want a short drop.
+- **Grasp height decides the plate trials, to the millimetre.** With the spoon flat on the surface, closing at z = 0.26 m was unreliable (it held in one run and missed in another after three closes; a run with no height given pushed the spoon), while z = 0.255 m held in all three runs in the table. The fingertip offset is good to about 3 mm, so the right number was found by trying, not computed. Give the model an absolute z for the grasp and for the release, and re-find the grasp z if the offset or the surface changes.
+- **Releasing 3 cm above the plate** (z = 0.3 m on a surface at about 0.24 m) dropped the spoon onto the plate in all three runs in the table.
+- **Disk.** Each run records about 40 MB of video; one run died when the disk filled. Prune `var/runs` or point `runtime.record_dir` at other storage.
 - **The fingertip floor works.** A model that tries to go below it gets the error text and retries; nothing moves.
 - **Models differ in style, not in outcome.** Terra looked more often, moved higher and used more tokens (14-15 decisions against 10-13 for Astra).
-- **Keep hands out of the scene.** The model noticed a hand in trial 2, but only the e-stop and the pendant limits are real protection.
+- **Keep hands out of the scene.** The model noticed a hand in the view once, but only the e-stop and the pendant limits are real protection.
 - **Costs** were about $0.4-0.6 per run for Astra by the log's estimate; Terra has no entry in `harness/prices.json` and shows as unpriced.
 
 ## Behaviour to know

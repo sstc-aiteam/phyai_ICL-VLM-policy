@@ -6,8 +6,10 @@ import pytest
 
 from gpt_policy.harness.config import (
     AGENT_NAMES,
+    DEFAULT_PROFILES,
     AgentConfig,
     agent_config,
+    agent_provider,
     load_claude_key,
     named_agent_config,
     save_claude_key,
@@ -17,7 +19,7 @@ from gpt_policy.harness.factory import create_agent, preflight_agent
 
 def write_agent(directory, name, value):
     agents = directory / "agents"
-    agents.mkdir()
+    agents.mkdir(exist_ok=True)
     (agents / f"{name}.json").write_text(json.dumps(value), encoding="utf-8")
 
 
@@ -39,6 +41,25 @@ def test_video_preprocessor_can_load_codex_independently_of_selected_agent(tmp_p
     assert named_agent_config("codex", tmp_path) == AgentConfig(
         "codex", "gpt-video", "codex", "high", None,
     )
+
+
+def test_profile_variants_resolve_to_their_provider(tmp_path):
+    write_agent(tmp_path, "codex-astra", {"model": "gpt-astra"})
+    write_agent(tmp_path, "codex-terra", {"model": "gpt-terra"})
+
+    assert agent_config({"agent": "codex-terra"}, tmp_path) == AgentConfig("codex", "gpt-terra", "codex", "medium", None)
+    assert agent_config({"agent": "codex"}, tmp_path).model == "gpt-astra"  # a bare provider means its default variant
+    assert agent_provider("codex-terra") == "codex"
+    with pytest.raises(ValueError, match="不支持的 agent"):
+        agent_config({"agent": "gemini-pro"}, tmp_path)
+
+
+def test_repository_codex_profiles_load():
+    configs = Path(__file__).resolve().parents[1] / "configs"
+
+    assert named_agent_config("codex", configs).model == "gpt-6-astra"
+    assert named_agent_config("codex-astra", configs).model == "gpt-6-astra"
+    assert named_agent_config("codex-terra", configs).model == "gpt-6.1-terra"
 
 
 def test_naming_override_loads_without_changing_robot_model(tmp_path):
@@ -80,7 +101,7 @@ def test_repository_main_and_agent_configs_resolve_together(tmp_path):
 
     selected = settings["agent"]
     selected_file = json.loads(
-        (configs / "agents" / f"{selected}.json").read_text(encoding="utf-8")
+        (configs / "agents" / f"{DEFAULT_PROFILES.get(selected, selected)}.json").read_text(encoding="utf-8")
     )
     assert selected in {"codex", "claude"}
     assert agent_config(settings, configs, credentials).model == selected_file["model"]

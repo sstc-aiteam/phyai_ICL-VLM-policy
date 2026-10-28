@@ -1,0 +1,8 @@
+{
+  "model": "gpt-6.1-terra",
+  "executable": "codex",
+  "effort": "medium",
+  "live_image_window": null,
+  "task_name_model": "gpt-5.6-luna",
+  "task_name_effort": "low"
+}
