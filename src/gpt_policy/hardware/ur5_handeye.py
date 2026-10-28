@@ -2,6 +2,9 @@
 
     python -m gpt_policy.hardware.ur5_handeye --config configs/machines/lab-ur5.json --cols 8 --rows 5
 
+For a calibration that holds across the workspace, fix the board and capture from several hand-guided start
+poses with ``--starts 4 --execute --min-flange-z 0.5``; they are fitted together.
+
 Put the arm where the wrist camera sees the board (jog it by hand), then run. By default this only
 looks: it detects the board, plans the poses and prints every joint move, and sends nothing.
 ``--execute`` then moves the arm through the planned poses at low speed, each a small rotation of the
@@ -196,9 +199,9 @@ def fit_with_rejection(samples, camera_matrix, distortion, points, max_rms_px=1.
         if best[1] > 0.7 * result[1]:
             break
         kept.remove(worst)
-        dropped.append(samples[worst]["pose"])
+        dropped.append(samples[worst].get("label", samples[worst]["pose"]))
         result = best
-    return (*result, [samples[i]["pose"] for i in kept], dropped)
+    return (*result, [samples[i].get("label", samples[i]["pose"]) for i in kept], dropped)
 
 
 def board_object_points(cols: int, rows: int, square_m: float) -> np.ndarray:
@@ -407,13 +410,40 @@ def main(argv=None) -> int:
     parser.add_argument("--max-joint-move-rad", type=float, default=0.9)
     parser.add_argument("--max-translation-m", type=float, default=0.15)
     parser.add_argument("--min-flange-z", type=float, default=0.4, help="Lowest allowed flange z in the base frame, metres")
+    parser.add_argument("--starts", type=int, default=1,
+                        help="Capture from this many hand-guided start poses around one fixed board and fit them together")
     parser.add_argument("--solve", type=Path, help="Solve from a saved session.json instead of capturing")
     args = parser.parse_args(argv)
     settings = load_settings(args.config)
     if args.solve:
         return solve_and_report(_load_session(args.solve, args), settings, args)
-    samples = capture_session(settings, args, args.execute)
-    return 0 if samples is None else solve_and_report(samples, settings, args)
+    if args.starts == 1:
+        samples = capture_session(settings, args, args.execute)
+        return 0 if samples is None else solve_and_report(samples, settings, args)
+    collected = []
+    for start in range(1, args.starts + 1):
+        while True:
+            answer = input(f"[start pose {start}/{args.starts}] Hand-guide the arm to a NEW viewing pose of the same board "
+                           "(different place, height and viewing direction; whole grid visible, fingers clear of it), "
+                           "keep your hand off it, then press Enter (q skips this one): ")
+            if answer.strip().lower() == "q":
+                break
+            try:
+                samples = capture_session(settings, args, args.execute)
+            except SystemExit as exc:
+                print(exc)
+                continue
+            for sample in samples or []:
+                sample["label"] = f"{start}.{sample['pose']}"
+            collected += samples or []
+            break
+    if not args.execute:
+        return 0
+    args.output.mkdir(parents=True, exist_ok=True)
+    combined = args.output / f"combined-{time.strftime('%Y%m%d-%H%M%S')}.json"
+    combined.write_text(json.dumps(collected, indent=2))
+    print(f"Saved {len(collected)} samples from {args.starts} start poses to {combined}")
+    return solve_and_report(collected, settings, args)
 
 
 if __name__ == "__main__":
