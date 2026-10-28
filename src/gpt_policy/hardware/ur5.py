@@ -214,17 +214,37 @@ class UR5Robot(YamRobot):
         self.motion.fault = details
         raise MotionFault(details)
 
-    def _feedback(self):
-        raw = self.driver.read()
+    def _check_stops(self, raw):
         if raw["emergency_stopped"]:
             self._fault({"reason": "emergency_stop"})
         if raw["protective_stopped"]:
             self._fault({"reason": "protective_stop"})
+        return raw
+
+    def _await_fresh_feed(self, stamp):
+        """The same timestamp after a long gap is not yet a stale link.
+
+        A gripper script resets RTDE and the receive side can replay its last packet for a moment, so wait
+        for the timestamp to move, rebuild the receive link once, and only then call the feed stale.
+        """
+        for attempt in range(2):
+            deadline = time.monotonic() + STALE_FEED_S
+            while time.monotonic() < deadline:
+                time.sleep(0.01)
+                raw = self.driver.read()
+                if raw["controller_time_s"] != stamp:
+                    return raw
+            if attempt == 0 and hasattr(self.driver, "resync_receive"):
+                self.driver.resync_receive()
+        raise RuntimeError("RTDE state feed has not updated; the receive link is stale")
+
+    def _feedback(self):
+        raw = self._check_stops(self.driver.read())
         stamp, seen = self._last_feed
+        if raw["controller_time_s"] == stamp and time.monotonic() - seen > STALE_FEED_S:
+            raw = self._check_stops(self._await_fresh_feed(stamp))
         if raw["controller_time_s"] != stamp:
             self._last_feed = (raw["controller_time_s"], time.monotonic())
-        elif time.monotonic() - seen > STALE_FEED_S:
-            raise RuntimeError("RTDE state feed has not updated; the receive link is stale")
         q = np.r_[raw["q"], self._gripper_impl.opening]
         dq = np.r_[raw["dq"], 0.0]
         temperature = np.r_[raw["temperature_c"], 0.0]

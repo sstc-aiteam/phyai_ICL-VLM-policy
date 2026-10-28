@@ -125,6 +125,9 @@ class FakeReceive:
         return [0.0] * 6
 
     def getTimestamp(self):
+        if getattr(self, "frozen_reads", 0) > 0:  # replays its last packet, as after a gripper script
+            self.frozen_reads -= 1
+            return self.time
         self.time += 0.008
         return self.time
 
@@ -242,6 +245,29 @@ def test_targets_below_the_fingertip_floor_are_refused_before_any_motion():
         assert control.servo_calls == 0
         ok = [tcp[0], tcp[1], floor + 0.005, *tcp[3:]]
         robot.execute("check_path", {"poses": [{"pose_xyzquat": ok}], "note": "above the floor"})
+    finally:
+        robot.close()
+
+
+def test_a_feed_that_replays_its_last_packet_after_a_long_pause_is_waited_out_not_called_stale():
+    robot, _, receive = build()
+    try:
+        robot.state()
+        robot._last_feed = (receive.time, robot._last_feed[1] - 10.0)  # the model thought for a while
+        receive.frozen_reads = 5
+        assert robot.state()["joint_positions_rad"]  # no RuntimeError
+    finally:
+        robot.close()
+
+
+def test_a_feed_that_never_advances_is_still_reported_stale():
+    robot, _, receive = build()
+    try:
+        robot.state()
+        robot._last_feed = (receive.time, robot._last_feed[1] - 10.0)
+        receive.frozen_reads = 10_000
+        with pytest.raises(RuntimeError, match="stale"):
+            robot.state()
     finally:
         robot.close()
 
