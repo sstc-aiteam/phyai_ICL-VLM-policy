@@ -23,6 +23,7 @@ Copy `configs/examples/ur5-local.json` to a machine profile and set the values b
 | Fingertip TCP | `calibration.link6_from_tcp` | The example ships an approximate 0.15 m z offset. Start from a ruler measurement and confirm it with the hover test below. See [Calibrating the arm](#calibrating-the-arm) for why the pivot tool alone is not enough with flat pads. |
 | Wrist camera | `cameras.left`, `vision.camera_intrinsics.left`, `calibration.link6_from_camera.left` | The wrist camera is named `left` so it maps to the only arm. Intrinsics are the D405 factory values; the hand-eye needs the capture below. |
 | Arm kinematics | `robot.kinematics_calibration` | This arm's factory DH calibration. Every UR arm differs from the nominal model by millimetres, enough to fail the startup check. Run `python -m gpt_policy.hardware.ur5_kinematics <robot ip>` (read-only) and paste the block into the profile. |
+| Fingertip floor | `robot.min_tcp_z_m` | Optional. Targets with a fingertip z below this (base frame, metres) are refused before planning, for `check_path` too. Set it a few millimetres above the working surface, measured with the hover test. It is tied to where the surface is: change it if the setup moves. |
 | Robotiq script | `robot.robotiq_preamble` | Path to a Python file defining `ROBOTIQ_PREAMBLE` (the ur_rtde Robotiq preamble). If unset, `ur7e_recorder` is imported when installed. |
 
 At startup the adapter compares its DH model with the controller's own forward

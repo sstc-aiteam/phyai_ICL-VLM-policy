@@ -223,6 +223,29 @@ def test_startup_kinematics_check_never_sends_an_all_zero_tool_offset():
         robot.close()
 
 
+def test_targets_below_the_fingertip_floor_are_refused_before_any_motion():
+    settings = {**SETTINGS, "robot": {**SETTINGS["robot"], "min_tcp_z_m": 0.0}}
+    receive = FakeReceive(HOME)
+    control = FakeControl(receive, 0.0)
+    link = UR5Link("sim", hz=125.0, control=control, receive=receive, receive_factory=lambda: receive)
+    robot = UR5Robot("sim", settings, link=link, gripper=NoGripper())
+    try:
+        tcp = robot.state()["tcp_xyzquat"]
+        floor = tcp[2] - 0.02
+        robot.min_tcp_z = floor
+        low = [tcp[0], tcp[1], floor - 0.005, *tcp[3:]]
+        for tool, arguments in (("check_path", {"poses": [{"pose_xyzquat": low}]}),
+                                ("move_to", {"target": {"pose_xyzquat": low}}),
+                                ("move_eef_chunk", {"poses": [{"pose_xyzquat": tcp}, {"pose_xyzquat": low}]})):
+            with pytest.raises(ValueError, match="fingertip floor"):
+                robot.execute(tool, {**arguments, "note": "too low"})
+        assert control.servo_calls == 0
+        ok = [tcp[0], tcp[1], floor + 0.005, *tcp[3:]]
+        robot.execute("check_path", {"poses": [{"pose_xyzquat": ok}], "note": "above the floor"})
+    finally:
+        robot.close()
+
+
 def test_check_path_sends_no_commands():
     robot, control, _ = build()
     try:

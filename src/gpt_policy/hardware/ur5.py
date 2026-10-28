@@ -156,6 +156,8 @@ class UR5Robot(YamRobot):
         motion = settings.get("motion", {})
         hz = float(runtime.get("trajectory_hz", 125))
         limits = robot.get("joint_limits_rad")
+        floor = robot.get("min_tcp_z_m")
+        self.min_tcp_z = None if floor is None else float(floor)
         self._gripper_impl = gripper
         self._last_feed = (None, time.monotonic())
         link = link or UR5Link(
@@ -183,6 +185,17 @@ class UR5Robot(YamRobot):
             speed_percent=robot.get("gripper_speed_percent", 50),
             force_percent=robot.get("gripper_force_percent", 50),
             settle_s=robot.get("gripper_settle_s", 0.2))
+
+    def plan_eef_trajectory(self, requested, note):
+        """Refuse targets below ``robot.min_tcp_z_m`` before planning (also for check_path); the model sees the error."""
+        if self.min_tcp_z is not None:
+            for item in requested:
+                pose = item.get("pose_xyzquat") if isinstance(item, dict) else None
+                if pose is not None and len(pose) >= 3 and float(pose[2]) < self.min_tcp_z:
+                    raise ValueError(
+                        f"Target z={float(pose[2]):.3f} m is below the fingertip floor min_tcp_z_m={self.min_tcp_z:.3f} m "
+                        "(about the surface height); choose a higher z.")
+        return super().plan_eef_trajectory(requested, note)
 
     def _verify_kinematics(self):
         """Fail at startup if the DH model is not this controller's robot."""
