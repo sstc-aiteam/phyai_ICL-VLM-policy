@@ -75,6 +75,30 @@ Things that went wrong on the way:
 - **`getForwardKinematics` hang.** On CB3 3.13 `ur_rtde` never answers it with an all-zero tool offset, so the adapter uses a 1 micrometre offset.
 - **One touch is not a calibration.** A hand touch of a printed corner is only good to several millimetres. Use touches to cross-check, not as the only reference.
 
+## Pick-and-place trials on the lab arm
+
+Eight runs of "pick up the spoon and put it in the bowl" with the wrist camera only (`robot.min_tcp_z_m` = 0.243 m, 15-decision cap, pendant safety limits set). A spoon, a bowl and later a distractor plate sat on one flat surface at the board's height. "Confirmed" means the operator looked.
+
+| # | model | grasp | result |
+| --- | --- | --- | --- |
+| 1 | gpt-6-astra | handle | in the bowl (confirmed); the floor refused one descent to z = 0.234 m and the model retried at 0.243 m |
+| 2 | gpt-6-astra | handle | in the bowl (confirmed); a hand entered the view after the grasp and the model paused until it left |
+| 3 | gpt-6-astra | head | model reported success |
+| 4 | gpt-6-astra | head | protective stop lowering the held spoon into the bowl (z = 0.264 m); the pendant limit caught it |
+| 5 | gpt-6-astra | neck | in the bowl (confirmed); an adapter fault right after the release, fixed (stale-feed wait) |
+| 6 | gpt-6-astra | neck | model reported success; released about 14 cm above the rim |
+| 7 | gpt-6.1-terra | neck | in the bowl (confirmed) from about 26 cm above the rim |
+| 8 | gpt-6.1-terra | neck | in the bowl (confirmed) from about 9 cm above the rim |
+
+What the trials showed:
+
+- **Grasping worked every time it was tried**, on the handle, the head and the neck of a flat spoon, to within the few millimetres of the calibration (descents stopped at the fingertip floor, z = 0.243-0.249 m).
+- **The failures were in placing**, not grasping. Lowering a held spoon into the bowl hit the rim (trial 4). "Keep it at least 2 cm above the rim" was read as "stay high" (14 and 26 cm drops). "Lower to about 3 cm above the rim" gave 9 cm: with an RGB wrist camera the model cannot measure the rim to a few millimetres, so it keeps a margin. Give it the measured rim height as an absolute z if you want a short drop.
+- **The fingertip floor works.** A model that tries to go below it gets the error text and retries; nothing moves.
+- **Models differ in style, not in outcome.** Terra looked more often, moved higher and used more tokens (14-15 decisions against 10-13 for Astra).
+- **Keep hands out of the scene.** The model noticed a hand in trial 2, but only the e-stop and the pendant limits are real protection.
+- **Costs** were about $0.4-0.6 per run for Astra by the log's estimate; Terra has no entry in `harness/prices.json` and shows as unpriced.
+
 ## Behaviour to know
 
 - **Frames.** Poses are in the controller base frame (what RTDE reports). The model sees the calibrated fingertip TCP.
