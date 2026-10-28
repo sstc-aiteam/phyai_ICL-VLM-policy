@@ -85,6 +85,8 @@ Fifteen runs with the wrist camera only: eight of "pick up the spoon and put it 
 | 14 | gpt-6.1-terra | neck, z = 0.255 m, release z = 0.3 m | on the centre of the plate (confirmed) |
 | 15 | gpt-6.1-terra | neck, z = 0.255 m, release z = 0.3 m | on the centre of the plate (confirmed) |
 
+The model comes from the agent profile: `configs/agents/codex-astra.json` (`gpt-6-astra`, what plain `codex` resolves to) or `codex-terra.json` (`gpt-6.1-terra`). Pick one with `--agent codex-terra`, or `"agent": "codex-terra"` in the machine profile. Trials 13-15 used Terra with `runtime.max_decisions` = 30.
+
 What the trials showed:
 
 - **Grasping worked every time on the first eight trials**, on the handle, the head and the neck of a flat spoon, to within the few millimetres of the calibration (descents stopped at the fingertip floor, z = 0.243-0.249 m).
