@@ -275,10 +275,7 @@ def _run(args, interrupts) -> None:
         recorder.write("camera_warmup_completed", warmup)
         display.message("Cameras ready. Starting recording.")
         recording_settings = settings.get("recording", {})
-        video = RunVideo(
-            cameras, record_dir, int(recording_settings.get("fps", 10)),
-            int(recording_settings.get("jpeg_quality", 65)),
-        )
+        video = RunVideo(cameras, record_dir, int(recording_settings.get("fps", 10)))
         recorder.set_recording(video.details)
         backend = settings.get("backend", "arx")
         if backend == "yam":

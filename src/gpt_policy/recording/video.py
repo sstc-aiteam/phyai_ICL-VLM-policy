@@ -6,23 +6,24 @@ import threading
 import time
 import json
 from contextlib import ExitStack
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+from PIL import Image
 
 from ..hardware.camera import CameraSet, CapturedImage
-from .jpeg import encode_jpeg
-from .mp4 import MjpegMp4Writer
+from .h264 import H264Mp4Writer
 
 
 class RunVideo:
     """Record one MP4 per camera while keeping inference capture independent."""
 
-    def __init__(self, cameras: CameraSet, directory: Path, fps: int = 10, quality: int = 65) -> None:
+    def __init__(self, cameras: CameraSet, directory: Path, fps: int = 10) -> None:
         if fps <= 0:
             raise ValueError("录像 fps 必须大于零")
-        self.cameras, self.fps, self.quality = cameras, fps, quality
+        self.cameras, self.fps = cameras, fps
         names = [camera.name for camera in cameras.cameras]
         if not names or len(set(names)) != len(names) or any(
             not name or Path(name).name != name for name in names
@@ -30,7 +31,7 @@ class RunVideo:
             raise ValueError("相机名称须唯一且不能包含路径")
         with ExitStack() as files:
             self.writers = {
-                camera.name: files.enter_context(MjpegMp4Writer(
+                camera.name: files.enter_context(H264Mp4Writer(
                     directory / f"{camera.name}.mp4", camera.width, camera.height, fps,
                 ))
                 for camera in cameras.cameras
@@ -78,11 +79,11 @@ class RunVideo:
                     "path": writer.path.name,
                     "width": writer.width,
                     "height": writer.height,
-                    "frames": len(writer.sizes),
+                    "frames": writer.frames,
                 }
                 for name, writer in self.writers.items()
             },
-            "codec": "Motion JPEG",
+            "codec": "H.264",
             "container": "MP4",
             "fps": self.fps,
             "frames": self._video_frames,
@@ -107,7 +108,13 @@ class RunVideo:
         self._record_thread.join(timeout=5)
         if self._capture_thread.is_alive() or self._record_thread.is_alive():
             raise TimeoutError("Camera/video thread did not stop within 5 seconds")
-        self._files.close()
+        # Closing finalizes each MP4; report an earlier capture/record error first.
+        try:
+            self._files.close()
+        except Exception as exc:
+            self._raise_capture_error()
+            if self._record_error is None:
+                raise RuntimeError(f"录像编码失败: {exc}") from exc
         self._raise_capture_error()
         if self._record_error is not None:
             raise RuntimeError(f"录像编码失败: {self._record_error}") from self._record_error
@@ -153,18 +160,18 @@ class RunVideo:
                 rgb = np.frombuffer(image.rgb_data, dtype=np.uint8).reshape(
                     image.height, image.width, 3,
                 )
-                jpeg = encode_jpeg(rgb, self.quality)
             elif image.mime_type == "image/jpeg":
-                jpeg = image.data
+                # Camera MJPEG payloads are decoded once for the H.264 encoder.
+                with Image.open(BytesIO(image.data)) as decoded:
+                    rgb = np.asarray(decoded.convert("RGB"))
             else:
                 raise RuntimeError(f"相机 {name} 缺少可录制的 RGB/JPEG 画面")
-            writer.append(jpeg)
+            writer.append(rgb)
             self.timestamps.write(json.dumps({
                 "camera": name, "frame_index": self._video_frames,
                 "captured_at_s": image.captured_at,
                 "source_timestamp_s": image.source_timestamp_s, "source_clock": image.source_clock,
                 "recorded_at_s": time.time(),
-                "jpeg_offset": writer.offsets[-1], "jpeg_size": writer.sizes[-1],
                 "width": writer.width, "height": writer.height, "fps": self.fps,
             }) + "\n")
         self._video_frames += 1

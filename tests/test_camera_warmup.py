@@ -1,4 +1,5 @@
 import json
+import subprocess
 from io import BytesIO
 from types import SimpleNamespace
 import time
@@ -67,10 +68,13 @@ def test_waits_for_slowest_camera_and_discards_overexposure_and_blue_cast(monkey
     finally:
         video.stop()
     for writer in video.writers.values():
-        data = writer.path.read_bytes()
-        assert writer.sizes
-        with Image.open(BytesIO(data[writer.offsets[0]:writer.offsets[0] + writer.sizes[0]])) as first:
-            np.testing.assert_allclose(first.getpixel((8, 8)), (128, 128, 128), atol=2)
+        assert writer.frames
+        first = subprocess.check_output([
+            "ffmpeg", "-nostdin", "-v", "error", "-i", str(writer.path),
+            "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1",
+        ])
+        rgb = np.frombuffer(first, dtype=np.uint8).reshape(16, 16, 3)
+        np.testing.assert_allclose(rgb[8, 8], (128, 128, 128), atol=4)
 
 
 def test_stable_colored_scene_is_not_forced_to_neutral_white(monkeypatch):
